@@ -3,7 +3,7 @@ name: Windows release
 on:
   push:
     branches: [main]
-    paths: ["src/main.go"]
+    paths: ["src/main.go", ".github/workflows/release.yml"]
   workflow_dispatch:
 
 permissions:
@@ -26,14 +26,21 @@ jobs:
         shell: pwsh
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'nsis.zip'
-          Invoke-WebRequest -Uri 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11.zip' -OutFile $archive
-          if ((Get-FileHash $archive).Hash -ne 'C7D27F780DDB6CFFB4730138CD1591E841F4B7EDB155856901CDF5F214394FA1') {
-            throw 'NSIS archive checksum mismatch.'
+          $hash = 'C7D27F780DDB6CFFB4730138CD1591E841F4B7EDB155856901CDF5F214394FA1'
+          foreach ($mirror in 'netix.dl.sourceforge.net','phoenixnap.dl.sourceforge.net','pilotfiber.dl.sourceforge.net') {
+            curl.exe --fail --silent --show-error --location --max-time 20 "https://$mirror/project/nsis/NSIS%203/3.11/nsis-3.11.zip" --output $archive
+            if ($LASTEXITCODE -eq 0 -and (Get-FileHash $archive).Hash -eq $hash) {
+              Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
+              "NSIS_COMPILER=$env:RUNNER_TEMP/nsis-3.11/makensis.exe" >> $env:GITHUB_ENV
+              exit 0
+            }
           }
-          Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
+          choco install nsis --version=3.11 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Could not obtain a verified NSIS compiler.' }
+          "NSIS_COMPILER=${env:ProgramFiles(x86)}/NSIS/makensis.exe" >> $env:GITHUB_ENV
       - name: Test and build Windows packages
         shell: pwsh
-        run: ./installer/build.ps1 -OutputDirectory ./dist -MakeNSIS "$env:RUNNER_TEMP/nsis-3.11/makensis.exe"
+        run: ./installer/build.ps1 -OutputDirectory ./dist -MakeNSIS "$env:NSIS_COMPILER"
       - name: Publish release
         shell: pwsh
         env:

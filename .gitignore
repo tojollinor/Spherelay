@@ -1,0 +1,10 @@
+*.exe
+*.zip
+/dist/
+/capture-analysis/
+*.pcap
+*.pcapng
+*.etl
+*.log
+settings.json
+discovery-credentials.json
